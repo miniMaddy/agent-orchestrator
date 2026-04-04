@@ -74,13 +74,21 @@ export async function cleanNextCache(webDir: string): Promise<void> {
  * Rebuild dashboard production artifacts from a source checkout.
  * Global npm installs ship prebuilt artifacts and cannot rebuild in place.
  */
-export async function rebuildDashboardProductionArtifacts(webDir: string): Promise<void> {
+export function assertDashboardRebuildSupported(webDir: string): void {
   if (webDir.includes("node_modules")) {
     throw new Error(
       "Dashboard rebuild is only available from a source checkout. " +
       "Run `ao update`, or reinstall with `npm install -g @composio/ao@latest`.",
     );
   }
+}
+
+/**
+ * Rebuild dashboard production artifacts from a source checkout.
+ * Global npm installs ship prebuilt artifacts and cannot rebuild in place.
+ */
+export async function rebuildDashboardProductionArtifacts(webDir: string): Promise<void> {
+  assertDashboardRebuildSupported(webDir);
 
   await cleanNextCache(webDir);
 

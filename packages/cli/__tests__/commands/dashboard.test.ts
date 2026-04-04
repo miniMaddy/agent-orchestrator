@@ -89,6 +89,24 @@ describe("findRunningDashboardPid", () => {
   });
 });
 
+describe("assertDashboardRebuildSupported", () => {
+  it("passes for a source checkout", async () => {
+    const { assertDashboardRebuildSupported } = await import("../../src/lib/dashboard-rebuild.js");
+
+    expect(() =>
+      assertDashboardRebuildSupported("/home/user/agent-orchestrator/packages/web"),
+    ).not.toThrow();
+  });
+
+  it("throws for an npm-installed package path", async () => {
+    const { assertDashboardRebuildSupported } = await import("../../src/lib/dashboard-rebuild.js");
+
+    expect(() =>
+      assertDashboardRebuildSupported("/usr/local/lib/node_modules/@composio/ao-web"),
+    ).toThrow("Dashboard rebuild is only available from a source checkout");
+  });
+});
+
 describe("findProcessWebDir", () => {
   it("extracts cwd from lsof output", async () => {
     const webDir = join(tmpDir, "web");

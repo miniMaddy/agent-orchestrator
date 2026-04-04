@@ -5,6 +5,7 @@ import type { Command } from "commander";
 import { loadConfig } from "@composio/ao-core";
 import { findWebDir, buildDashboardEnv, waitForPortAndOpen } from "../lib/web-dir.js";
 import {
+  assertDashboardRebuildSupported,
   findRunningDashboardPid,
   rebuildDashboardProductionArtifacts,
   waitForPortFree,
@@ -30,6 +31,8 @@ export function registerDashboard(program: Command): void {
       const localWebDir = findWebDir(); // throws with install-specific guidance if not found
 
       if (opts.rebuild) {
+        assertDashboardRebuildSupported(localWebDir);
+
         // Check if a dashboard is already running on this port.
         const runningPid = await findRunningDashboardPid(port);
 
