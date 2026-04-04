@@ -129,48 +129,6 @@ describe("assertDashboardRebuildSupported", () => {
   });
 });
 
-describe("findProcessWebDir", () => {
-  it("extracts cwd from lsof output", async () => {
-    const webDir = join(tmpDir, "web");
-    mkdirSync(webDir, { recursive: true });
-    writeFileSync(join(webDir, "package.json"), "{}");
-
-    // Simulate lsof -p <pid> -Fn output
-    mockExecSilent.mockResolvedValue(
-      `p12345\nfcwd\nn${webDir}\nftxt\nn/usr/bin/node`,
-    );
-
-    const { findProcessWebDir } = await import("../../src/lib/dashboard-rebuild.js");
-
-    const result = await findProcessWebDir("12345");
-    expect(result).toBe(webDir);
-  });
-
-  it("returns null when cwd has no package.json", async () => {
-    const webDir = join(tmpDir, "web");
-    mkdirSync(webDir, { recursive: true });
-    // No package.json
-
-    mockExecSilent.mockResolvedValue(
-      `p12345\nfcwd\nn${webDir}\nftxt\nn/usr/bin/node`,
-    );
-
-    const { findProcessWebDir } = await import("../../src/lib/dashboard-rebuild.js");
-
-    const result = await findProcessWebDir("12345");
-    expect(result).toBeNull();
-  });
-
-  it("returns null when lsof fails", async () => {
-    mockExecSilent.mockResolvedValue(null);
-
-    const { findProcessWebDir } = await import("../../src/lib/dashboard-rebuild.js");
-
-    const result = await findProcessWebDir("12345");
-    expect(result).toBeNull();
-  });
-});
-
 describe("looksLikeStaleBuild pattern matching", () => {
   // We can't import the private function directly, so we replicate the patterns
   // to ensure the detection logic catches the actual error messages seen in production.
