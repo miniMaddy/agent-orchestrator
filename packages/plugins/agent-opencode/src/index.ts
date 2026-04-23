@@ -72,6 +72,62 @@ function parseSessionList(raw: string): OpenCodeSessionListEntry[] {
   });
 }
 
+// TTL cache + in-flight dedupe for `opencode session list --format json`.
+// See the matching block in @aoagents/ao-core's session-manager for the
+// motivation (issue #1046). Mirrored here because this plugin invokes the
+// same command independently from `findOpenCodeSession`. The TTL covers the
+// 3s window of the core send-confirmation loop while keeping freshness
+// adequate for activity polling.
+export const OPENCODE_SESSION_LIST_CACHE_TTL_MS = 3_000;
+const OPENCODE_SESSION_LIST_TIMEOUT_MS = 30_000;
+
+interface OpenCodeSessionListCache {
+  entries: OpenCodeSessionListEntry[];
+  timestamp: number;
+  promise?: Promise<OpenCodeSessionListEntry[]>;
+}
+
+let sessionListCache: OpenCodeSessionListCache | null = null;
+
+/** Test-only: clear the module-level opencode session list cache. */
+export function resetOpenCodeSessionListCache(): void {
+  sessionListCache = null;
+}
+
+async function getCachedSessionList(): Promise<OpenCodeSessionListEntry[]> {
+  const now = Date.now();
+  if (sessionListCache) {
+    if (sessionListCache.promise) {
+      return sessionListCache.promise;
+    }
+    if (now - sessionListCache.timestamp < OPENCODE_SESSION_LIST_CACHE_TTL_MS) {
+      return sessionListCache.entries;
+    }
+  }
+
+  const promise: Promise<OpenCodeSessionListEntry[]> = execFileAsync(
+    "opencode",
+    ["session", "list", "--format", "json"],
+    { timeout: OPENCODE_SESSION_LIST_TIMEOUT_MS },
+  )
+    .then(({ stdout }) => {
+      const entries = parseSessionList(stdout);
+      if (sessionListCache?.promise === promise) {
+        sessionListCache = { entries, timestamp: Date.now() };
+      }
+      return entries;
+    })
+    .catch(() => {
+      if (sessionListCache?.promise === promise) {
+        sessionListCache = null;
+      }
+      return [] as OpenCodeSessionListEntry[];
+    });
+
+  sessionListCache = { entries: [], timestamp: now, promise };
+  return promise;
+}
+
 /**
  * Parse JSON stream lines from `opencode run --format json` output.
  * Each line is a JSON object. We look for objects containing a session_id field.
@@ -161,13 +217,7 @@ async function findOpenCodeSession(
   session: Session,
 ): Promise<OpenCodeSessionListEntry | null> {
   try {
-    const { stdout } = await execFileAsync(
-      "opencode",
-      ["session", "list", "--format", "json"],
-      { timeout: 30_000 },
-    );
-
-    const sessions = parseSessionList(stdout);
+    const sessions = await getCachedSessionList();
 
     // Prefer exact ID match from metadata
     if (session.metadata?.opencodeSessionId) {
