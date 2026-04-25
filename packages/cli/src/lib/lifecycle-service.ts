@@ -4,7 +4,6 @@ import {
   type LifecycleManager,
   type OrchestratorConfig,
 } from "@aoagents/ao-core";
-import { startBunTmpJanitor, stopBunTmpJanitor } from "./bun-tmp-janitor.js";
 import { getLifecycleManager } from "./create-session-manager.js";
 
 const DEFAULT_INTERVAL_MS = 30_000;
@@ -45,26 +44,6 @@ export async function ensureLifecycleWorker(
   const lifecycle = await getLifecycleManager(config, projectId);
 
   lifecycle.start(intervalMs);
-
-  // Start the Bun-extracted /tmp/.*.so janitor alongside the first lifecycle
-  // worker. It is process-wide (not per-project), idempotent, and a no-op on
-  // non-Linux platforms.
-  startBunTmpJanitor({
-    onSweep: ({ removed, freedBytes, errors }) => {
-      observer.setHealth({
-        surface: "lifecycle.worker",
-        status: errors > 0 ? "warn" : "ok",
-        projectId,
-        correlationId: createCorrelationId("bun-tmp-janitor"),
-        details: {
-          component: "bun-tmp-janitor",
-          removed,
-          freedBytes,
-          errors,
-        },
-      });
-    },
-  });
 
   observer.setHealth({
     surface: "lifecycle.worker",
@@ -107,7 +86,6 @@ export function stopAllLifecycleWorkers(): void {
     }
     active.delete(projectId);
   }
-  stopBunTmpJanitor();
 }
 
 export function isLifecycleWorkerRunning(projectId: string): boolean {

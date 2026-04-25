@@ -44,6 +44,7 @@ import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 import { exec, execSilent, git } from "../lib/shell.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
 import { ensureLifecycleWorker, stopAllLifecycleWorkers } from "../lib/lifecycle-service.js";
+import { startBunTmpJanitor, stopBunTmpJanitor } from "../lib/bun-tmp-janitor.js";
 import {
   findWebDir,
   buildDashboardEnv,
@@ -1526,6 +1527,20 @@ export function registerStart(program: Command): void {
           });
           unlockStartup();
 
+          // Start the Bun-extracted /tmp/.*.{so,dylib} janitor once per AO
+          // process. Single-instance is enforced by running.json + the
+          // startup lock above, so this call site is reached at most once
+          // per process. The janitor uses an unref'd interval timer, so it
+          // does not keep the event loop alive on its own and dies with the
+          // process on SIGTERM/SIGINT.
+          startBunTmpJanitor({
+            onSweep: ({ errors }) => {
+              if (errors > 0) {
+                console.warn(`[bun-tmp-janitor] sweep had ${errors} error(s)`);
+              }
+            },
+          });
+
           // Install shutdown handlers so `ao stop` (which sends SIGTERM to
           // this pid) flushes lifecycle health state before exit. Handlers
           // MUST call process.exit() — installing a SIGINT/SIGTERM listener
@@ -1539,6 +1554,11 @@ export function registerStart(program: Command): void {
               stopAllLifecycleWorkers();
             } catch {
               // Best-effort cleanup — never block shutdown on observability.
+            }
+            try {
+              stopBunTmpJanitor();
+            } catch {
+              // Best-effort cleanup.
             }
             process.exit(signal === "SIGINT" ? 130 : 0);
           };
