@@ -194,7 +194,10 @@ export function SessionDetail({
           )}
 
           <div className="dashboard-main dashboard-main--desktop">
-            <main className="session-detail-page flex-1 min-h-0 flex flex-col bg-[var(--color-bg-base)]">
+            <main
+              className="session-detail-page flex-1 min-h-0 overflow-y-auto flex flex-col bg-[var(--color-bg-base)]"
+              data-testid="session-detail-scroll-region"
+            >
               <div className="flex-1 min-h-0 flex flex-col">
                 {!showTerminal ? (
                   <div className="session-detail-terminal-placeholder h-full" />
