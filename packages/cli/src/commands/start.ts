@@ -1637,6 +1637,10 @@ export function registerStart(program: Command): void {
           // Non-TTY callers (scripts/agents) keep the old "AO is already
           // running" message and do NOT mutate config behind the user's back.
           if (running && projectArgIsUrlOrPath && isHumanCaller()) {
+            const requestedProjectArg = projectArg;
+            if (!requestedProjectArg) {
+              throw new Error("Expected project path or URL argument");
+            }
             // Always register against the GLOBAL config — never the cwd's
             // local config. Cross-project visibility lives in the global
             // registry, and addProjectToConfig only routes to global when
@@ -1647,9 +1651,9 @@ export function registerStart(program: Command): void {
               : loadConfig();
 
             let existingId: string | null = null;
-            if (isRepoUrl(projectArg!)) {
+            if (isRepoUrl(requestedProjectArg)) {
               try {
-                const parsed = parseRepoUrl(projectArg!);
+                const parsed = parseRepoUrl(requestedProjectArg);
                 for (const [id, p] of Object.entries(globalCfg.projects)) {
                   if (p.repo === parsed.ownerRepo) {
                     existingId = id;
@@ -1661,7 +1665,7 @@ export function registerStart(program: Command): void {
               }
             } else {
               const resolvedPath = resolve(
-                projectArg!.replace(/^~/, process.env["HOME"] || ""),
+                requestedProjectArg.replace(/^~/, process.env["HOME"] || ""),
               );
               let canonicalTarget: string;
               try {
@@ -1698,14 +1702,14 @@ export function registerStart(program: Command): void {
             let resolvedId: string;
             if (existingId) {
               resolvedId = existingId;
-            } else if (isRepoUrl(projectArg!)) {
+            } else if (isRepoUrl(requestedProjectArg)) {
               // Clone + register inline. We DO NOT call handleUrlStart —
               // that helper writes a legacy wrapped (`projects:`) local
               // config that the new resolver rejects, requiring a repair
               // pass after the fact. Instead, we write a flat local config
               // here so the global registry + repo can be loaded cleanly
               // on the very first read.
-              const parsed = parseRepoUrl(projectArg!);
+              const parsed = parseRepoUrl(requestedProjectArg);
               console.log(
                 chalk.bold.cyan(`\n  Cloning ${parsed.ownerRepo} (${parsed.host})\n`),
               );
@@ -1737,7 +1741,7 @@ export function registerStart(program: Command): void {
                 throw new Error(
                   `Repository "${parsed.ownerRepo}" appears to be empty (no commits or refs).\n` +
                     `  AO needs at least one commit on the default branch to spawn an orchestrator.\n` +
-                    `  Push an initial commit, then re-run \`ao start ${projectArg}\`.`,
+                    `  Push an initial commit, then re-run \`ao start ${requestedProjectArg}\`.`,
                 );
               }
 
@@ -1776,7 +1780,7 @@ export function registerStart(program: Command): void {
               }
             } else {
               const resolvedPath = resolve(
-                projectArg!.replace(/^~/, process.env["HOME"] || ""),
+                requestedProjectArg.replace(/^~/, process.env["HOME"] || ""),
               );
               resolvedId = await addProjectToConfig(globalCfg, resolvedPath);
             }
