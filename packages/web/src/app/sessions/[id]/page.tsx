@@ -404,6 +404,7 @@ export default function SessionPage() {
   const projectSessionsFetchControllerRef = useRef<AbortController | null>(null);
   const sidebarFetchControllerRef = useRef<AbortController | null>(null);
   const pageUnloadingRef = useRef(false);
+  const killNavigationPendingRef = useRef(false);
 
   // Keep prefixByProjectRef in sync so fetchProjectSessions (stable [] dep) reads latest map
   useEffect(() => {
@@ -479,7 +480,7 @@ export default function SessionPage() {
 
   // Fetch session data (memoized to avoid recreating on every render)
   const fetchSession = useCallback(async () => {
-    if (fetchingSessionRef.current) return;
+    if (fetchingSessionRef.current || killNavigationPendingRef.current) return;
     fetchingSessionRef.current = true;
     const controller = new AbortController();
     sessionFetchControllerRef.current = controller;
@@ -497,7 +498,12 @@ export default function SessionPage() {
       setSessionMissing(false);
       hasLoadedSessionRef.current = true;
     } catch (err) {
-      if (pageUnloadingRef.current || controller.signal.aborted || isAbortLikeError(err)) {
+      if (
+        pageUnloadingRef.current ||
+        killNavigationPendingRef.current ||
+        controller.signal.aborted ||
+        isAbortLikeError(err)
+      ) {
         return;
       }
       const message = err instanceof Error ? err.message : "Failed to load session";
@@ -526,7 +532,7 @@ export default function SessionPage() {
   }, [id]);
 
   const fetchProjectSessions = useCallback(async () => {
-    if (fetchingProjectSessionsRef.current) return;
+    if (fetchingProjectSessionsRef.current || killNavigationPendingRef.current) return;
     const projectId = sessionProjectIdRef.current;
     if (!projectId) return;
     const isOrchestrator = sessionIsOrchestratorRef.current;
@@ -591,7 +597,7 @@ export default function SessionPage() {
   }, []);
 
   const fetchSidebarSessions = useCallback(async () => {
-    if (fetchingSidebarRef.current) return;
+    if (fetchingSidebarRef.current || killNavigationPendingRef.current) return;
     fetchingSidebarRef.current = true;
     const controller = new AbortController();
     sidebarFetchControllerRef.current = controller;
@@ -852,6 +858,9 @@ export default function SessionPage() {
       sidebarLoading={sidebarSessions === null}
       sidebarError={sidebarError}
       onRetrySidebar={fetchSidebarSessions}
+      onKillNavigationChange={(pending) => {
+        killNavigationPendingRef.current = pending;
+      }}
     />
   );
 }

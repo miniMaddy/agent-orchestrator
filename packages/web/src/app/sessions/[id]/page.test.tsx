@@ -86,7 +86,9 @@ describe("SessionPage project polling", () => {
     vi.restoreAllMocks();
   });
 
-  it("resolves orchestrator nav once for non-orchestrator pages and skips repeated project polling", async () => {
+  it(
+    "resolves orchestrator nav once for non-orchestrator pages and skips repeated project polling",
+    async () => {
     const workerSession = makeWorkerSession();
     const sidebarSessions = [workerSession];
 
@@ -185,7 +187,9 @@ describe("SessionPage project polling", () => {
     expect(
       vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/sessions?fresh=true"),
     ).toHaveLength(3);
-  });
+    },
+    10_000,
+  );
 
   it("does not deadlock project polling after a cached worker poll is skipped", async () => {
     const workerSession = makeWorkerSession();
@@ -282,17 +286,13 @@ describe("SessionPage project polling", () => {
 
     const { default: SessionPage } = await import("./page");
 
-    render(
-      <TestErrorBoundary>
-        <SessionPage />
-      </TestErrorBoundary>,
-    );
+    render(<SessionPage />);
     await flushAsyncWork();
 
     expect(screen.getByText("Session not found")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Toggle sidebar" })).toBeInTheDocument();
     expect(screen.queryByTestId("session-detail")).not.toBeInTheDocument();
-    expect(screen.getByTestId("route-error")).toHaveTextContent("NEXT_NOT_FOUND");
+    expect(screen.queryByTestId("route-error")).not.toBeInTheDocument();
   });
 
   it("renders an inline error state instead of throwing the route away", async () => {

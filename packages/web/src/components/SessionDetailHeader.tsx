@@ -27,6 +27,7 @@ interface SessionDetailHeaderProps {
   isOrchestrator: boolean;
   isMobile: boolean;
   terminalEnded: boolean;
+  killPending: boolean;
   isRestorable: boolean;
   activity: { label: string; color: string };
   headline: string;
@@ -71,6 +72,7 @@ export function SessionDetailHeader({
   isOrchestrator,
   isMobile,
   terminalEnded,
+  killPending,
   isRestorable,
   activity,
   headline,
@@ -288,6 +290,7 @@ export function SessionDetailHeader({
             type="button"
             className="dashboard-app-btn dashboard-app-btn--danger"
             onClick={onKill}
+            disabled={killPending}
           >
             <svg
               className="h-3.5 w-3.5"
@@ -298,7 +301,7 @@ export function SessionDetailHeader({
             >
               <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
             </svg>
-            <span className="topbar-btn-label">Kill</span>
+            <span className="topbar-btn-label">{killPending ? "Terminating…" : "Kill"}</span>
           </button>
         ) : null}
 

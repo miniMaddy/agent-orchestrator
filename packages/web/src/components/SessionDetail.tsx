@@ -22,6 +22,7 @@ import {
 } from "./SessionDetailHeader";
 import { SessionEndedSummary } from "./SessionEndedSummary";
 import { sessionActivityMeta } from "./session-detail-utils";
+import { ToastProvider, useToast } from "./Toast";
 
 export type { OrchestratorZones } from "./SessionDetailHeader";
 
@@ -47,9 +48,10 @@ interface SessionDetailProps {
   sidebarLoading?: boolean;
   sidebarError?: boolean;
   onRetrySidebar?: () => void;
+  onKillNavigationChange?: (pending: boolean) => void;
 }
 
-export function SessionDetail({
+function SessionDetailContent({
   session,
   isOrchestrator = false,
   orchestratorZones,
@@ -59,14 +61,17 @@ export function SessionDetail({
   sidebarLoading = false,
   sidebarError = false,
   onRetrySidebar,
+  onKillNavigationChange,
 }: SessionDetailProps) {
   const router = useRouter();
+  const { showToast } = useToast();
   const searchParams = useSearchParams();
   const isMobile = useMediaQuery(MOBILE_BREAKPOINT);
   const startFullscreen = searchParams.get("fullscreen") === "true";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
+  const [killPending, setKillPending] = useState(false);
   const pr = session.pr;
   const terminalEnded = TERMINAL_STATUSES.has(session.status);
   const isRestorable = terminalEnded && !NON_RESTORABLE_STATUSES.has(session.status);
@@ -90,20 +95,38 @@ export function SessionDetail({
   const dashboardHref = session.projectId ? projectDashboardPath(session.projectId) : "/";
 
   const handleKill = useCallback(async () => {
+    const redirectTarget = projectOrchestratorId
+      ? projectSessionPath(session.projectId, projectOrchestratorId)
+      : dashboardHref;
+
+    setKillPending(true);
+    onKillNavigationChange?.(true);
+
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/kill`, {
         method: "POST",
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      if (projectOrchestratorId) {
-        router.push(projectSessionPath(session.projectId, projectOrchestratorId));
-        return;
+      if (!res.ok) {
+        const message = await res.text().catch(() => "");
+        throw new Error(message || `HTTP ${res.status}`);
       }
-      router.push(dashboardHref);
+      router.push(redirectTarget);
     } catch (err) {
       console.error("Failed to kill session:", err);
+      const message = err instanceof Error ? err.message : "Unknown error";
+      showToast(`Terminate failed: ${message}`, "error");
+      setKillPending(false);
+      onKillNavigationChange?.(false);
     }
-  }, [dashboardHref, projectOrchestratorId, router, session.id, session.projectId]);
+  }, [
+    dashboardHref,
+    onKillNavigationChange,
+    projectOrchestratorId,
+    router,
+    session.id,
+    session.projectId,
+    showToast,
+  ]);
 
   const handleRestore = useCallback(async () => {
     try {
@@ -159,6 +182,7 @@ export function SessionDetail({
           onToggleSidebar={handleToggleSidebar}
           onRestore={handleRestore}
           onKill={handleKill}
+          killPending={killPending}
         />
 
         <div
@@ -236,5 +260,13 @@ export function SessionDetail({
         />
       </div>
     </SidebarContext.Provider>
+  );
+}
+
+export function SessionDetail(props: SessionDetailProps) {
+  return (
+    <ToastProvider>
+      <SessionDetailContent {...props} />
+    </ToastProvider>
   );
 }

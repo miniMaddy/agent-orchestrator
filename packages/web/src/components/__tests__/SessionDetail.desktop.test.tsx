@@ -394,4 +394,32 @@ describe("SessionDetail desktop layout", () => {
 
     expect(routerPushMock).toHaveBeenCalledWith("/projects/my-app");
   });
+
+  it("shows an error toast and stays on the session page when terminate fails", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve("backend unavailable"),
+      } as Response),
+    );
+
+    render(
+      <SessionDetail
+        session={makeSession({
+          id: "worker-kill-failure",
+          projectId: "my-app",
+          status: "running",
+        })}
+        projectOrchestratorId={null}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Kill" }));
+    });
+
+    expect(routerPushMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Terminate failed: backend unavailable")).toBeInTheDocument();
+  });
 });
