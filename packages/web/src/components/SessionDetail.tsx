@@ -355,7 +355,7 @@ export function SessionDetail({
   }, [isOrchestrator, projectOrchestratorId, session.id]);
 
   return (
-    <div className="session-detail-page min-h-screen bg-[var(--color-bg-base)]">
+    <div className="session-detail-page flex h-screen flex-col overflow-hidden bg-[var(--color-bg-base)]">
       {isOrchestrator && orchestratorZones && !isMobile && (
         <OrchestratorStatusStrip
           zones={orchestratorZones}
@@ -370,7 +370,10 @@ export function SessionDetail({
         />
       )}
 
-      <div className="dashboard-main mx-auto max-w-[1180px] px-5 py-5 lg:px-8">
+      <div
+        className="dashboard-main mx-auto flex-1 min-h-0 max-w-[1180px] overflow-y-auto px-5 py-5 lg:px-8"
+        data-testid="session-detail-scroll-region"
+      >
         <main className="min-w-0">
           {(!isOrchestrator || isMobile) && (
             <SessionTopStrip

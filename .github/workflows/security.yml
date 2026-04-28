@@ -62,7 +62,9 @@ jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    # Dependency Review requires GitHub's dependency graph, which is enabled on upstream
+    # but may be unavailable on personal forks used for contribution PRs.
+    if: github.event_name == 'pull_request' && github.repository == 'ComposioHQ/agent-orchestrator'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
