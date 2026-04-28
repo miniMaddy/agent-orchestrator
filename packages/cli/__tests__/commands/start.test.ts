@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { parse as parseYaml } from "yaml";
 import { EventEmitter } from "node:events";
-import type { SessionManager } from "@aoagents/ao-core";
+import { ConfigNotFoundError, type SessionManager } from "@aoagents/ao-core";
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -2085,6 +2085,14 @@ describe("stop command", () => {
 
 describe("start command — autoCreateConfig", () => {
   it("generates config with empty notifiers array (no desktop notifier added by default)", async () => {
+    const originalCurrent = mockConfigRef.current;
+    Object.defineProperty(mockConfigRef, "current", {
+      get() {
+        throw new ConfigNotFoundError("No config found");
+      },
+      configurable: true,
+    });
+
     const { detectEnvironment } = await import("../../src/lib/detect-env.js");
     vi.mocked(detectEnvironment).mockResolvedValue({
       isGitRepo: true,
@@ -2118,7 +2126,15 @@ describe("start command — autoCreateConfig", () => {
     const callerContext = await import("../../src/lib/caller-context.js");
     vi.spyOn(callerContext, "isHumanCaller").mockReturnValue(false);
 
-    await program.parseAsync(["node", "test", "start", "--no-dashboard", "--no-orchestrator"]);
+    try {
+      await program.parseAsync(["node", "test", "start", "--no-dashboard", "--no-orchestrator"]);
+    } finally {
+      Object.defineProperty(mockConfigRef, "current", {
+        value: originalCurrent,
+        writable: true,
+        configurable: true,
+      });
+    }
 
     const configPath = join(tmpDir, "agent-orchestrator.yaml");
     expect(existsSync(configPath)).toBe(true);
