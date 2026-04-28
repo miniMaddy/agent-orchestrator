@@ -9,6 +9,7 @@ import {
   getSiblings,
   formatPlanTree,
   TERMINAL_STATUSES,
+  buildPrompt,
   type OrchestratorConfig,
   type DecomposerConfig,
   DEFAULT_DECOMPOSER_CONFIG,
@@ -166,6 +167,116 @@ async function spawnSession(
   }
 }
 
+function buildSpawnPromptPreview(
+  config: OrchestratorConfig,
+  projectId: string,
+  issueId?: string,
+  lineage?: string[],
+  siblings?: string[],
+): string {
+  const project = config.projects[projectId];
+  if (!project) {
+    throw new Error(`Unknown project: ${projectId}`);
+  }
+
+  return buildPrompt({
+    project,
+    projectId,
+    issueId,
+    lineage,
+    siblings,
+  });
+}
+
+function printSpawnPromptPreviewHeader(
+  projectId: string,
+  issueId?: string,
+  decomposeEnabled?: boolean,
+): void {
+  console.log(banner("SPAWN PROMPT PREVIEW"));
+  console.log();
+  console.log(`  Project:   ${chalk.bold(projectId)}`);
+  console.log(`  Issue:     ${issueId ? chalk.bold(issueId) : chalk.dim("(none)")}`);
+  console.log(`  Decompose: ${decomposeEnabled ? chalk.bold("yes") : chalk.dim("no")}`);
+  console.log();
+}
+
+function printTrackerPreviewNote(config: OrchestratorConfig, projectId: string, issueId?: string): void {
+  const project = config.projects[projectId];
+  if (!issueId || !project?.tracker) {
+    return;
+  }
+
+  console.log(
+    chalk.yellow(
+      "Note: tracker issue details are omitted in preview mode because fetching them may require a network call.",
+    ),
+  );
+  console.log();
+}
+
+async function previewSpawnPrompt(
+  config: OrchestratorConfig,
+  projectId: string,
+  issueId: string | undefined,
+  options: { decompose?: boolean; maxDepth?: string },
+): Promise<void> {
+  printSpawnPromptPreviewHeader(projectId, issueId, options.decompose && Boolean(issueId));
+  printTrackerPreviewNote(config, projectId, issueId);
+
+  if (options.decompose && issueId) {
+    const project = config.projects[projectId];
+    if (!project) {
+      throw new Error(`Unknown project: ${projectId}`);
+    }
+
+    const decompConfig: DecomposerConfig = {
+      ...DEFAULT_DECOMPOSER_CONFIG,
+      ...(project.decomposer ?? {}),
+      maxDepth: options.maxDepth
+        ? parseInt(options.maxDepth, 10)
+        : (project.decomposer?.maxDepth ?? 3),
+    };
+
+    const spinner = ora("Decomposing task...").start();
+    const plan = await decompose(issueId, decompConfig);
+    const leaves = getLeaves(plan.tree);
+    spinner.succeed(`Decomposed into ${chalk.bold(String(leaves.length))} subtasks`);
+
+    console.log();
+    console.log(chalk.dim(formatPlanTree(plan.tree)));
+    console.log();
+
+    if (leaves.length <= 1) {
+      console.log(chalk.yellow("Task is atomic — previewing direct spawn prompt."));
+      console.log();
+      console.log(buildSpawnPromptPreview(config, projectId, issueId));
+      console.log();
+      return;
+    }
+
+    for (const [index, leaf] of leaves.entries()) {
+      const siblings = getSiblings(plan.tree, leaf.id);
+      console.log(
+        chalk.bold(`Subtask ${index + 1}/${leaves.length}: ${leaf.description}`),
+      );
+      console.log();
+      console.log(buildSpawnPromptPreview(config, projectId, issueId, leaf.lineage, siblings));
+      console.log();
+
+      if (index < leaves.length - 1) {
+        console.log(chalk.dim("─".repeat(80)));
+        console.log();
+      }
+    }
+
+    return;
+  }
+
+  console.log(buildSpawnPromptPreview(config, projectId, issueId));
+  console.log();
+}
+
 export function registerSpawn(program: Command): void {
   program
     .command("spawn")
@@ -177,6 +288,7 @@ export function registerSpawn(program: Command): void {
     .option("--claim-pr <pr>", "Immediately claim an existing PR for the spawned session")
     .option("--assign-on-github", "Assign the claimed PR to the authenticated GitHub user")
     .option("--decompose", "Decompose issue into subtasks before spawning")
+    .option("--preview-prompt", "Print the composed prompt without creating a session")
     .option("--max-depth <n>", "Max decomposition depth (default: 3)")
     .action(
       async (
@@ -188,6 +300,7 @@ export function registerSpawn(program: Command): void {
           claimPr?: string;
           assignOnGithub?: boolean;
           decompose?: boolean;
+          previewPrompt?: boolean;
           maxDepth?: string;
         },
       ) => {
@@ -231,12 +344,26 @@ export function registerSpawn(program: Command): void {
           process.exit(1);
         }
 
+        if (opts.previewPrompt && (opts.open || opts.claimPr || opts.assignOnGithub)) {
+          console.error(
+            chalk.red(
+              "--preview-prompt does not create a session, so it cannot be combined with --open, --claim-pr, or --assign-on-github.",
+            ),
+          );
+          process.exit(1);
+        }
+
         const claimOptions: SpawnClaimOptions = {
           claimPr: opts.claimPr,
           assignOnGithub: opts.assignOnGithub,
         };
 
         try {
+          if (opts.previewPrompt) {
+            await previewSpawnPrompt(config, projectId, issueId, opts);
+            return;
+          }
+
           await runSpawnPreflight(config, projectId, claimOptions);
           await ensureLifecycleWorker(config, projectId);
 

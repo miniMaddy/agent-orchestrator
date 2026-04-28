@@ -4,23 +4,28 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { type Session, type SessionManager, getProjectBaseDir } from "@composio/ao-core";
 
-const { mockExec, mockConfigRef, mockSessionManager, mockEnsureLifecycleWorker } = vi.hoisted(
-  () => ({
-    mockExec: vi.fn(),
-    mockConfigRef: { current: null as Record<string, unknown> | null },
-    mockSessionManager: {
-      list: vi.fn(),
-      kill: vi.fn(),
-      cleanup: vi.fn(),
-      get: vi.fn(),
-      spawn: vi.fn(),
-      spawnOrchestrator: vi.fn(),
-      send: vi.fn(),
-      claimPR: vi.fn(),
-    },
-    mockEnsureLifecycleWorker: vi.fn(),
-  }),
-);
+const {
+  mockExec,
+  mockConfigRef,
+  mockSessionManager,
+  mockEnsureLifecycleWorker,
+  mockDecompose,
+} = vi.hoisted(() => ({
+  mockExec: vi.fn(),
+  mockConfigRef: { current: null as Record<string, unknown> | null },
+  mockSessionManager: {
+    list: vi.fn(),
+    kill: vi.fn(),
+    cleanup: vi.fn(),
+    get: vi.fn(),
+    spawn: vi.fn(),
+    spawnOrchestrator: vi.fn(),
+    send: vi.fn(),
+    claimPR: vi.fn(),
+  },
+  mockEnsureLifecycleWorker: vi.fn(),
+  mockDecompose: vi.fn(),
+}));
 
 vi.mock("../../src/lib/shell.js", () => ({
   tmux: vi.fn(),
@@ -48,6 +53,7 @@ vi.mock("@composio/ao-core", async (importOriginal) => {
   return {
     ...actual,
     loadConfig: () => mockConfigRef.current,
+    decompose: (...args: Parameters<typeof actual.decompose>) => mockDecompose(...args),
   };
 });
 
@@ -117,6 +123,7 @@ beforeEach(() => {
   mockSessionManager.claimPR.mockReset();
   mockExec.mockReset();
   mockEnsureLifecycleWorker.mockReset();
+  mockDecompose.mockReset();
   mockEnsureLifecycleWorker.mockResolvedValue({
     running: true,
     started: true,
@@ -362,6 +369,98 @@ describe("spawn command", () => {
     });
   });
 
+  it("prints a prompt preview without creating a session", async () => {
+    const projects = (mockConfigRef.current as Record<string, unknown>).projects as Record<
+      string,
+      Record<string, unknown>
+    >;
+    projects["my-app"].agentRules = "Always run tests before pushing.";
+
+    await program.parseAsync(["node", "test", "spawn", "INT-42", "--preview-prompt"]);
+
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("SPAWN PROMPT PREVIEW");
+    expect(output).toContain("Work on issue: INT-42");
+    expect(output).toContain("## Project Rules");
+    expect(output).toContain("Always run tests before pushing.");
+    expect(mockEnsureLifecycleWorker).not.toHaveBeenCalled();
+    expect(mockSessionManager.spawn).not.toHaveBeenCalled();
+  });
+
+  it("notes that tracker issue details are omitted in preview mode", async () => {
+    const projects = (mockConfigRef.current as Record<string, unknown>).projects as Record<
+      string,
+      Record<string, unknown>
+    >;
+    projects["my-app"].tracker = { plugin: "github" };
+
+    await program.parseAsync(["node", "test", "spawn", "INT-42", "--preview-prompt"]);
+
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("tracker issue details are omitted in preview mode");
+    expect(output).not.toContain("## Issue Details");
+    expect(mockSessionManager.spawn).not.toHaveBeenCalled();
+  });
+
+  it("previews decomposed prompts with lineage and sibling context", async () => {
+    mockDecompose.mockResolvedValue({
+      id: "plan-1",
+      rootTask: "INT-42",
+      maxDepth: 3,
+      phase: "review",
+      createdAt: "2026-04-09T00:00:00.000Z",
+      tree: {
+        id: "1",
+        depth: 0,
+        description: "INT-42",
+        kind: "composite",
+        status: "ready",
+        lineage: [],
+        children: [
+          {
+            id: "1.1",
+            depth: 1,
+            description: "Build CLI flag",
+            kind: "atomic",
+            status: "ready",
+            lineage: ["INT-42"],
+            children: [],
+          },
+          {
+            id: "1.2",
+            depth: 1,
+            description: "Add tests",
+            kind: "atomic",
+            status: "ready",
+            lineage: ["INT-42"],
+            children: [],
+          },
+        ],
+      },
+    });
+
+    await program.parseAsync([
+      "node",
+      "test",
+      "spawn",
+      "INT-42",
+      "--decompose",
+      "--preview-prompt",
+    ]);
+
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("Subtask 1/2: Build CLI flag");
+    expect(output).toContain("Subtask 2/2: Add tests");
+    expect(output).toContain("## Task Hierarchy");
+    expect(output).toContain("## Parallel Work");
+    expect(mockDecompose).toHaveBeenCalledWith(
+      "INT-42",
+      expect.objectContaining({ maxDepth: 3 }),
+    );
+    expect(mockEnsureLifecycleWorker).not.toHaveBeenCalled();
+    expect(mockSessionManager.spawn).not.toHaveBeenCalled();
+  });
+
   it("warns and exits when two positional args given (old syntax)", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -497,6 +596,19 @@ describe("spawn command", () => {
     expect(errors).toContain("--assign-on-github requires --claim-pr");
     expect(mockSessionManager.spawn).not.toHaveBeenCalled();
     expect(mockSessionManager.claimPR).not.toHaveBeenCalled();
+  });
+
+  it("rejects incompatible flags when previewing a prompt", async () => {
+    await expect(
+      program.parseAsync(["node", "test", "spawn", "--preview-prompt", "--claim-pr", "123"]),
+    ).rejects.toThrow("process.exit(1)");
+
+    const errors = vi
+      .mocked(console.error)
+      .mock.calls.map((c) => String(c[0]))
+      .join("\n");
+    expect(errors).toContain("--preview-prompt does not create a session");
+    expect(mockSessionManager.spawn).not.toHaveBeenCalled();
   });
 
   it("reports claim failures after creating the session", async () => {
