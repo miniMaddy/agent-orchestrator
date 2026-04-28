@@ -165,6 +165,7 @@ export {
   getWorkspaceAgentsMdPath,
   writeWorkspaceOpenCodeAgentsMd,
 } from "./opencode-agents-md.js";
+export { writeOpenCodeConfig } from "./opencode-config.js";
 export {
   getOrchestratorSessionId,
   normalizeOrchestratorSessionStrategy,
@@ -238,6 +239,15 @@ export type {
 
 // Path utilities — hash-based directory structure
 export {
+  // V2 path functions (projects/{projectId}/ layout)
+  getProjectDir,
+  getProjectSessionsDir,
+  getProjectWorktreesDir,
+  getProjectFeedbackReportsDir,
+  getOrchestratorPath,
+  getSessionPath,
+  parseTmuxNameV2,
+  // Legacy path functions (deprecated — migration only)
   generateConfigHash,
   generateProjectId,
   generateSessionPrefix,
@@ -256,15 +266,12 @@ export {
   validateAndStoreOrigin,
 } from "./paths.js";
 
-export {
-  normalizeOriginUrl,
-  relativeSubdir,
-  deriveStorageKey,
-} from "./storage-key.js";
+export { normalizeOriginUrl, relativeSubdir, deriveStorageKey } from "./storage-key.js";
 
 // Global config — Option C hybrid architecture (global registry + local behavior)
 export {
   getGlobalConfigPath,
+  isCanonicalGlobalConfigPath,
   loadGlobalConfig,
   saveGlobalConfig,
   loadLocalProjectConfig,
@@ -273,8 +280,7 @@ export {
   getLocalProjectConfigPath,
   repairWrappedLocalProjectConfig,
   registerProjectInGlobalConfig,
-  relinkProjectInGlobalConfig,
-  StorageKeyCollisionError,
+  generateExternalId,
   buildEffectiveProjectConfig,
   resolveProjectIdentity,
   isOldConfigFormat,
@@ -287,16 +293,13 @@ export type {
   LocalProjectConfig,
   LocalProjectConfigLoadResult,
   RegisterProjectOptions,
-  RelinkProjectOptions,
 } from "./global-config.js";
 
-export {
-  loadEffectiveProjectConfig,
-  iterateAllProjects,
-} from "./project-resolver.js";
+export { loadEffectiveProjectConfig, iterateAllProjects } from "./project-resolver.js";
 
 // Config generator — auto-generate config from repo URL
 export {
+  CONFIG_SCHEMA_URL,
   isRepoUrl,
   parseRepoUrl,
   detectScmPlatform,
@@ -304,6 +307,7 @@ export {
   detectProjectInfo,
   generateConfigFromUrl,
   configToYaml,
+  withConfigSchema,
   isRepoAlreadyCloned,
   resolveCloneTarget,
   sanitizeProjectId,
@@ -324,12 +328,7 @@ export type {
   PortfolioSession,
 } from "./types.js";
 
-export {
-  getAoBaseDir,
-  getPortfolioDir,
-  getPreferencesPath,
-  getRegisteredPath,
-} from "./paths.js";
+export { getAoBaseDir, getPortfolioDir, getPreferencesPath, getRegisteredPath } from "./paths.js";
 
 export {
   discoverProjects,
@@ -340,23 +339,32 @@ export {
   saveRegistered,
   getPortfolio,
   registerProject,
-  relinkProject,
   unregisterProject,
   refreshProject,
 } from "./portfolio-registry.js";
 
-export {
-  resolveProjectConfig,
-  clearConfigCache,
-} from "./portfolio-projects.js";
+export { resolveProjectConfig, clearConfigCache } from "./portfolio-projects.js";
 
-export {
-  listPortfolioSessions,
-  getPortfolioSessionCounts,
-} from "./portfolio-session-service.js";
+export { listPortfolioSessions, getPortfolioSessionCounts } from "./portfolio-session-service.js";
 
 export {
   resolvePortfolioProject,
   resolvePortfolioSession,
   derivePortfolioProjectId,
 } from "./portfolio-routing.js";
+
+// Storage V2 migration — one-time converter from hash-based to projectId-based layout
+export {
+  migrateStorage,
+  rollbackStorage,
+  inventoryHashDirs,
+  convertKeyValueToJson,
+} from "./migration/storage-v2.js";
+export type {
+  MigrationOptions,
+  MigrationResult,
+  RollbackOptions,
+  HashDirEntry,
+} from "./migration/storage-v2.js";
+
+export { atomicWriteFileSync } from "./atomic-write.js";

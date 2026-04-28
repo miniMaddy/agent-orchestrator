@@ -29,30 +29,6 @@ describe("Config Validation - Project Uniqueness", () => {
     expect(() => validateConfig(config)).not.toThrow();
   });
 
-  it("rejects duplicate storage keys with a distinct error", () => {
-    const config = {
-      projects: {
-        proj1: {
-          path: "/repos/integrator",
-          repo: "org/integrator",
-          defaultBranch: "main",
-          sessionPrefix: "proj1",
-          storageKey: "shared-storage",
-        },
-        proj2: {
-          path: "/other/backend",
-          repo: "org/backend",
-          defaultBranch: "main",
-          sessionPrefix: "proj2",
-          storageKey: "shared-storage",
-        },
-      },
-    };
-
-    expect(() => validateConfig(config)).toThrow(/Duplicate storage key/);
-    expect(() => validateConfig(config)).not.toThrow(/Duplicate project ID/);
-  });
-
   it("accepts unique basenames", () => {
     const config = {
       projects: {
@@ -70,6 +46,31 @@ describe("Config Validation - Project Uniqueness", () => {
     };
 
     expect(() => validateConfig(config)).not.toThrow();
+  });
+});
+
+describe("Config Validation - Numeric Fields", () => {
+  const baseConfig = {
+    projects: {
+      app: {
+        path: "/repos/app",
+      },
+    },
+  };
+
+  it("rejects fractional ports", () => {
+    expect(() => validateConfig({ ...baseConfig, port: 3000.5 })).toThrow();
+    expect(() => validateConfig({ ...baseConfig, terminalPort: 14800.5 })).toThrow();
+    expect(() => validateConfig({ ...baseConfig, directTerminalPort: 14801.5 })).toThrow();
+  });
+
+  it("rejects fractional lifecycle grace periods", () => {
+    expect(() =>
+      validateConfig({
+        ...baseConfig,
+        lifecycle: { mergeCleanupIdleGraceMs: 300_000.5 },
+      }),
+    ).toThrow();
   });
 });
 
