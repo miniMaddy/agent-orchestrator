@@ -225,7 +225,7 @@ describe("ProjectSidebar", () => {
     });
   });
 
-  it("refreshes after removing the active project before redirecting home", async () => {
+  it("redirects home and refreshes after removing the active project", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true }),
