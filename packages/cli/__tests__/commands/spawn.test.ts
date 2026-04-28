@@ -579,14 +579,44 @@ describe("spawn command", () => {
       "test",
       "spawn",
       "--prompt",
-      "  Fix the flaky test\nand update snapshots  ",
+      "  Fix the flaky test\r\nand update snapshots\rnow  ",
     ]);
 
     expect(mockSessionManager.spawn).toHaveBeenCalledWith({
       projectId: "my-app",
       issueId: undefined,
       agent: undefined,
-      prompt: "Fix the flaky test and update snapshots",
+      prompt: "Fix the flaky test  and update snapshots now",
+    });
+  });
+
+  it("accepts --prompt values up to 4096 characters", async () => {
+    const fakeSession: Session = {
+      id: "app-5",
+      projectId: "my-app",
+      status: "spawning",
+      activity: null,
+      branch: null,
+      issueId: null,
+      pr: null,
+      workspacePath: "/tmp/wt",
+      runtimeHandle: { id: "hash-app-5", runtimeName: "tmux", data: {} },
+      agentInfo: null,
+      createdAt: new Date(),
+      lastActivityAt: new Date(),
+      metadata: {},
+    };
+
+    const maxLengthPrompt = "x".repeat(4096);
+    mockSessionManager.spawn.mockResolvedValue(fakeSession);
+
+    await program.parseAsync(["node", "test", "spawn", "--prompt", maxLengthPrompt]);
+
+    expect(mockSessionManager.spawn).toHaveBeenCalledWith({
+      projectId: "my-app",
+      issueId: undefined,
+      agent: undefined,
+      prompt: maxLengthPrompt,
     });
   });
 
